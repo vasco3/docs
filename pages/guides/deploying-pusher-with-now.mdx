@@ -1,0 +1,218 @@
+import Guide from '~/components/layout/guide'
+import Snippet from '~/components/snippet'
+import { TerminalInput } from '~/components/text/terminal'
+import { InlineCode } from '~/components/text/code'
+import Caption from '~/components/text/caption'
+import Note from '~/components/text/note'
+import { GenericLink } from '~/components/text/link'
+import Card from '~/components/card'
+import { P } from '~/components/text/paragraph'
+import { Image } from '~/components/media'
+
+export const meta = {
+  title: 'Deploying Realtime Serverless Apps with Pusher and Now',
+  description:
+    'How to get started building and deploying realtime serverless apps with Pusher and ZEIT Now',
+  published: '2019-08-19T17:01:20.896Z',
+  authors: ['coetry'],
+  url: '/guides/deploying-pusher-with-now',
+  image: '',
+  editUrl: 'pages/guides/deploying-pusher-with-now.mdx',
+  lasEdited: '2019-08-19T17:01:20.896Z',
+  lastEdited: '2019-08-20T19:14:47.000Z'
+}
+
+WebSockets have enabled realtime online experiences like collaborative document editing, multiplayer games, and interactive chatrooms. Solutions like [socket.io](https://socket.io) have made writing WebSocket servers a breeze, but what if our backend is a serverless lambda function with limited execution times?
+
+By design, lambda functions have maximum execution limits and should aim to respond to the client as quick as possible. An open WebSocket connection would require processes to live until the connection is closed, which can be well over the maximum execution time. Thankfully, we have solutions like [Pusher Channels](https://pusher.com/channels) that solve complex realtime infrastructure problems so we don’t have to. All we need is a single lambda function to _publish_ or _push_ some data, and a client to _subscribe_ to channels and data events.
+
+This guide demonstrates how to get started creating and deploying real-time serverless applications with framework agnostic HTML, CSS, JavaScript, Pusher, and Now. <Note>This guide will not be a full code walkthrough, but rather an overview of the key pieces. Please refer to the full source code linked at the bottom of the guide to see how everything fits together.</Note>
+
+## Step 1: Pusher Account Setup
+
+Let's start by making an account on [Pusher](https://dashboard.pusher.com/accounts/sign_up) and creating a new app. Locate the _Create new app_ button on the left sidebar.
+
+<Image
+  src={`/static/guides/deploying-pusher-with-now/create-new-pusher-app.png`}
+  width={650}
+  height={380}
+  oversize
+/>
+
+Next, we'll give our app a name and select a region. Choose a region closest to the majority of your customers to minimize latency.
+
+<Image
+  src={`/static/guides/deploying-pusher-with-now/name-pusher-app.png`}
+  width={650}
+  height={380}
+  oversize
+/>
+
+From your dashboard, you can scroll down to find all of your pusher apps. Locate the one you just created and click on it.
+
+<Image
+  src={`/static/guides/deploying-pusher-with-now/click-newly-created-pusher-app.png`}
+  width={650}
+  height={380}
+  oversize
+/>
+
+Finally, click on the tab that reveals your App Keys. We need to copy these values so that we can save them as secrets and then pass them as environmental variables.
+
+<Image
+  src={`/static/guides/deploying-pusher-with-now/pusher-app-keys.png`}
+  width={650}
+  height={380}
+  oversize
+/>
+
+## Step 2: Set Up Your Project
+
+Now that we have our Pusher account and app set up, let's create our directory structure. All we need is a root directory where our static files (HTML, CSS, JS) will live and an `api` directory with our lambda functions. Create a new directory named <InlineCode>realtime-lambda</InlineCode> and in it, create a directory named <InlineCode>api</InlineCode>. Then enter your newly created directory.
+
+<Snippet dark text="mkdir -p realtime-lambda/api && cd realtime-lambda" />
+
+With our directory set up, create an <InlineCode>index.html</InlineCode> file and add the script tags below inside the <InlineCode>body</InlineCode>.
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <script src="https://js.pusher.com/4.4/pusher.min.js"></script>
+    <script src="main.js"></script>
+  </body>
+</html>
+```
+
+<Caption>
+  Adding <InlineCode>script</InlineCode> tags inside the{' '}
+  <InlineCode>body</InlineCode>of our<InlineCode>index.html</InlineCode>
+</Caption>
+
+We want to create an instance of a Pusher client that subscribes and reacts to events on the appropriate channel. We also want to send data to our lambda that will trigger a push event.
+
+Create a <InlineCode>main.js</InlineCode> file where we'll initialize a Pusher object with our app key and an object containing our cluster info.
+
+<Note>
+  Our app key will be exposed on the client, but that's fine since we need to
+  combine it with a secret in order to push anything. We'll do that later in our
+  lambda function by passing it through an environmental variable.
+</Note>
+
+With our object, we'll subscribe to the appropriate channel and bind a callback function to react to our events within that channel. We can subscribe to as many channels and bind callbacks to as many events as we need.
+
+```js
+// initialize Pusher client
+let pusher = new Pusher('app-key', {
+  cluster: 'cluster-region'
+})
+
+// subscribe to the appropriate channel channel
+let channel = pusher.subscribe('channel-name')
+
+// bind a callback function to an event within the channel
+channel.bind('event-name', function(data) {
+  // do stuff with data
+})
+```
+
+<Caption>
+  Initializing a <InlineCode>Pusher</InlineCode> client, creating a channel, and
+  binding to an event
+</Caption>
+
+All that's remaining on the client is to create a way to send data to our backend to trigger push events. We just need to send a <InlineCode>POST</InlineCode> request to our lambda and can do so with the native [fetch API](https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API). By wrapping our request in a function, we can re-use it whenever we need to send data. Add the snippet below to your <InlineCode>main.js</InlineCode> file.
+
+<Note>
+  We haven't created our lambda function yet, but its good to mention that
+  routing follows the filesystem convention by default. All that's needed to
+  create a valid route for the path we are requesting, is to create a file named{' '}
+  <InlineCode>pusher-lambda.js</InlineCode> in our <InlineCode>api</InlineCode>{' '}
+  directory and it'll be invoked when we send a request to{' '}
+  <InlineCode>/api/pusher-lambda</InlineCode>.
+</Note>
+
+```js
+async function pushData(data) {
+  const res = await fetch('/api/pusher-lambda', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(data)
+  })
+  if (!res.ok) {
+    console.error('failed to push data')
+  }
+}
+```
+
+<Caption>
+  A function in <InlineCode>main.js</InlineCode> to send event data to our{' '}
+  <InlineCode>api</InlineCode>endpoint
+</Caption>
+
+Before we move over to our lambda, we need to first add the appropriate [secrets](https://zeit.co/docs/v2/build-step#using-environment-variables-and-secrets) to our account and expose them as environmental variables. We can do so with the [Now CLI](https://zeit.co/download). Since the app key and cluster are already exposed on the client and they are not sensitive, we don't need to add them as secrets. We'll only add our _app id_ and our _app secret_.
+
+<Snippet dark text={`now secrets add pusher-app-id "***"`} />
+<Snippet dark text={`now secrets add pusher-app-secret "***"`} />
+
+Next, create a minimal <InlineCode>now.json</InlineCode> file with environment variables to expose the secrets you added to your account.
+
+<Note>
+  We can pass unencrypted environment variables as plain text and encrypted
+  values stored in our account with the <InlineCode>@</InlineCode> prefix.
+</Note>
+
+```json
+{
+  "version": 2,
+  "env": {
+    "APP_ID": "@pusher-app-id",
+    "KEY": "app-key",
+    "SECRET": "@pusher-ap-secret",
+    "CLUSTER": "cluster-region"
+  }
+}
+```
+
+Now we need to add the dependencies for our lambda function. If you're in the project root, navigate to the <InlineCode>api</InlineCode> directory and add the [pusher](https://www.npmjs.com/package/pusher) npm package.
+
+<Snippet dark text="cd api && npm i pusher" />
+
+Create a new file called <InlineCode>pusher-lambda.js</InlineCode>. We grab our environmental variables from <InlineCode>process.env</InlineCode> and then initialize a new Pusher object with those values. Then we pull the data that we sent to our lambda via the [req.body](https://zeit.co/docs/v2/serverless-functions/supported-languages/#node.js-request-and-response-objects) helper method and invoke [pusher.trigger](https://github.com/pusher/pusher-http-node#publishing-events) with it in addition to the channel name and the event name. We need to send a status code and a response for the lambda or else our application would return an error, so we can just chain [req.status](https://github.com/pusher/pusher-http-node#publishing-events) and [req.end](https://github.com/pusher/pusher-http-node#publishing-events) with a simple success message
+
+```js
+const Pusher = require('pusher')
+
+const {
+  APP_ID: appId,
+  KEY: key,
+  SECRET: secret,
+  CLUSTER: cluster
+} = process.env
+
+const pusher = new Pusher({
+  appId,
+  key,
+  secret,
+  cluster
+})
+
+module.exports = (req, res) => {
+  const data = req.body
+  pusher.trigger('event-channel', 'event-name', data)
+  res.status(200).end('sent event succesfully')
+}
+```
+
+Once <InlineCode>pusher.trigger</InlineCode> is called, an event will be broadcasted to all subscribed clients. That's all there is to wire everything up! We've created a more complete demo with these concepts [here](https://github.com/zeit/now-examples/pull/468). Take a look, hack around, and give us your feedback. Have fun!
+
+export default ({ children }) => <Guide meta={meta}>{children}</Guide>
+
+export const config = {
+  amp: 'hybrid'
+}
