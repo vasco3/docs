@@ -15,7 +15,7 @@ export const meta = {
   editUrl: 'pages/guides/deploying-storybook-with-zeit-now.mdx',
   image:
     'https://og-image.now.sh/**Deploy%20a%20Storybook%20Library**%20%3Cbr%3E%20with%20ZEIT%20Now.png?theme=light&md=1&fontSize=100px&images=https%3A%2F%2Fassets.zeit.co%2Fimage%2Fupload%2Ffront%2Fassets%2Fdesign%2Fnow-black.svg&images=https%3A%2F%2Fpbs.twimg.com%2Fprofile_images%2F1100804485616566273%2FsOct-Txm_400x400.png',
-  lastEdited: '2019-08-16T19:47:20.000Z'
+  lastEdited: '2019-08-20T15:15:29.000Z'
 }
 
 [Storybook](https://storybook.js.org/) is an open source tool for developing JavaScript UI components in isolation.
@@ -26,7 +26,7 @@ In this guide, we will cover how to set up a Svelte Storybook component library 
 
 Get started by creating and moving into a `/svelte-stories` directory, then initializing the project:
 
-<Snippet dark text="mkdir svelte-stories && cd svelte-stories && yarn init -y" />
+<Snippet dark text="mkdir svelte-stories && cd svelte-stories && npm init -y" />
 <Caption>Creating and entering into the <InlineCode>/svelte-stories</InlineCode> directory, then initializing a project.</Caption>
 
 Next, use the [Storybook CLI](https://github.com/storybookjs/storybook/tree/master/lib/cli) to bootstrap the project, providing an initial setup to work from:
@@ -36,7 +36,7 @@ Next, use the [Storybook CLI](https://github.com/storybookjs/storybook/tree/mast
 
 Now, add `@storybook/svelte`, `@babel/core`, and `babel-loader` as development dependencies:
 
-<Snippet dark text="yarn add -D @storybook/svelte @babel/core babel-loader" />
+<Snippet dark text="npm i -D @storybook/svelte @babel/core babel-loader" />
 <Caption>Adding <InlineCode>@storybook/svelte</InlineCode>, <InlineCode>@babel/core</InlineCode>, and <InlineCode>babel-loader</InlineCode> to the project as a development dependencies.</Caption>
 
 With the development dependencies added, extend your `package.json` file by adding the scripts below:
@@ -56,7 +56,7 @@ With the development dependencies added, extend your `package.json` file by addi
   scripts to the <InlineCode>package.json</InlineCode> file.
 </Caption>
 
-By adding these scripts you are able to start a development server from inside your project directory with `yarn storybook`. You are also able to deploy the Storybook component library to [ZEIT Now](/now) with no additional configuration.
+By adding these scripts you are able to start a development server from inside your project directory with `npm storybook`. You are also able to deploy the Storybook component library to [ZEIT Now](/now) with no additional configuration.
 
 ## Step 2: Deploying to ZEIT Now
 
